@@ -14,11 +14,13 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"os/exec"
 	"runtime"
 	"sync"
 
+	"wordcloud/embedded"
+
+	"github.com/elazarl/go-bindata-assetfs"
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 	"golang.org/x/image/font"
@@ -126,12 +128,12 @@ func generate(w http.ResponseWriter, req *http.Request) {
 }
 
 func parseFont(ttfPath string) (*truetype.Font, error) {
-	f, e := os.Open(ttfPath)
-	if e != nil {
-		return nil, e
-	}
-	defer f.Close()
-	dat, e := ioutil.ReadAll(f)
+	//f, e := os.Open(ttfPath)
+	//if e != nil {
+	//	return nil, e
+	//}
+	//defer f.Close()
+	dat, e := embedded.Asset(ttfPath)
 	if e != nil {
 		return nil, e
 	}
@@ -154,6 +156,7 @@ const (
 	qualityHigh   = 5
 )
 
+//go:generate go-bindata -o embedded/bindata.go -pkg embedded -nomemcopy asset/...
 func main() {
 	fontPath := "asset/wqy-microhei.ttc"
 	var e error
@@ -164,9 +167,16 @@ func main() {
 	concurrent = make(chan struct{}, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
+
+	files := assetfs.AssetFS{
+		Asset:     embedded.Asset,
+		AssetDir:  embedded.AssetDir,
+		AssetInfo: embedded.AssetInfo,
+		Prefix:    "",
+	}
 	go func() {
 		mux := http.DefaultServeMux
-		mux.Handle("/", http.FileServer(http.Dir("asset/web")))
+		mux.Handle("/", http.FileServer(&files))
 		mux.HandleFunc("/cloud", generate)
 		e := http.ListenAndServe(":8765", mux)
 		if e != nil {
@@ -174,7 +184,7 @@ func main() {
 		}
 		wg.Done()
 	}()
-	e = OpenURLWithBrowser("http://localhost:8765")
+	e = OpenURLWithBrowser("http://localhost:8765/asset")
 	if e != nil {
 		log.Println(e)
 	}
@@ -275,27 +285,6 @@ func queryIntegralImage(img image.Image, sizeX, sizeY int, bgColor uint32, quali
 		}
 	}
 	return -1, -1
-}
-
-func createFakeDat() []*Text {
-	text := []string{
-		"hello", "liyiheng", "zsh", "gnome",
-		"linux", "git", "word cloud",
-		"golang", "rust", "中文测试",
-		"font", "baseline", "ascend", "descend", "bottom",
-		"top", "leading",
-	}
-	ret := make([]*Text, len(text))
-	for i, s := range text {
-		//c := rand.Uint32()
-		ret[i] = &Text{
-			Size:    float64(rand.Int31n(50) + 10),
-			Content: s,
-			//Color:   color.RGBA{R: uint8(c), G: uint8(c >> 8), B: uint8(c >> 16)},
-			ColorValue: color.RGBA{A: 255},
-		}
-	}
-	return ret
 }
 
 var commands = map[string]string{
