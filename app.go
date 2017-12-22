@@ -59,6 +59,7 @@ func (msg *NetMsg) SendTo(w http.ResponseWriter) {
 	}
 }
 
+// generate 接收客户端请求解析参数并生成结果
 func generate(w http.ResponseWriter, req *http.Request) {
 	concurrent <- struct{}{}
 	defer func() {
@@ -128,6 +129,7 @@ func generate(w http.ResponseWriter, req *http.Request) {
 	result.Data = b.Bytes()
 }
 
+// parseFont 用于将字体文件解析为字体
 func parseFont(ttfPath string) (*truetype.Font, error) {
 	//f, e := os.Open(ttfPath)
 	//if e != nil {
@@ -171,11 +173,12 @@ func main() {
 	d := flag.Bool("debug", false, "Debug mode use html/js/css files, or use embedded data")
 	flag.Parse()
 	mux := http.DefaultServeMux
+	log.Println("Debug:", *d)
 	if *d {
-		log.Println(*d)
+		// 调试模式下，webUI采用外部文件
 		mux.Handle("/", http.FileServer(http.Dir(".")))
-
 	} else {
+		// 费调试模式下，使用内嵌的数据
 		files := &assetfs.AssetFS{
 			Asset:     embedded.Asset,
 			AssetDir:  embedded.AssetDir,
@@ -186,7 +189,6 @@ func main() {
 
 	}
 	go func() {
-
 		mux.HandleFunc("/cloud", generate)
 		e := http.ListenAndServe(":8765", mux)
 		if e != nil {
@@ -201,6 +203,7 @@ func main() {
 	wg.Wait()
 }
 
+// measure 用于计算文本宽度
 func measure(dpi, size float64, txt string, fnt *truetype.Font) fixed.Int26_6 {
 	opt := &truetype.Options{
 		DPI:  dpi,
@@ -226,6 +229,8 @@ func colorSum(p color.Color) uint32 {
 	return r + g + b + a
 }
 
+// queryIntegralImage 查找符合(sizeX, sizeY)的空白区域，并随机取其一
+// 返回随机到的空白区域左上角的坐标，(-1,-1)表示未找到符合条件的
 func queryIntegralImage(img image.Image, sizeX, sizeY int, bgColor uint32, quality int) (lTopX, lTopY int) {
 	if quality < qualityHigh {
 		quality = qualityHigh
@@ -303,6 +308,8 @@ var commands = map[string]string{
 	"linux":   "xdg-open",
 }
 
+// OpenURLWithBrowser 调用系统浏览器打开指定URI，
+// 目前支持Linux、Darwin、Windows三种平台
 func OpenURLWithBrowser(uri string) error {
 	run, ok := commands[runtime.GOOS]
 	if !ok {

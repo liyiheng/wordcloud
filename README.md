@@ -2,7 +2,7 @@
 
 词云生成器，推荐[word_cloud](https://github.com/amueller/word_cloud)
 
-尝试用golang生成词云，功能基本实现，但十分粗糙，尚不能作为工具使用
+尝试用golang生成词云，基本功能已实现
 
 ![效果](out.png)
 
