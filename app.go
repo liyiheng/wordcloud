@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
@@ -167,16 +168,25 @@ func main() {
 	concurrent = make(chan struct{}, 1)
 	var wg sync.WaitGroup
 	wg.Add(1)
+	d := flag.Bool("debug", false, "Debug mode use html/js/css files, or use embedded data")
+	flag.Parse()
+	mux := http.DefaultServeMux
+	if *d {
+		log.Println(*d)
+		mux.Handle("/", http.FileServer(http.Dir(".")))
 
-	files := assetfs.AssetFS{
-		Asset:     embedded.Asset,
-		AssetDir:  embedded.AssetDir,
-		AssetInfo: embedded.AssetInfo,
-		Prefix:    "",
+	} else {
+		files := &assetfs.AssetFS{
+			Asset:     embedded.Asset,
+			AssetDir:  embedded.AssetDir,
+			AssetInfo: embedded.AssetInfo,
+			Prefix:    "",
+		}
+		mux.Handle("/", http.FileServer(files))
+
 	}
 	go func() {
-		mux := http.DefaultServeMux
-		mux.Handle("/", http.FileServer(&files))
+
 		mux.HandleFunc("/cloud", generate)
 		e := http.ListenAndServe(":8765", mux)
 		if e != nil {
