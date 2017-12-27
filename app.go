@@ -15,8 +15,10 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"sync"
 
 	"wordcloud/embedded"
@@ -30,7 +32,7 @@ import (
 
 type (
 	Text struct {
-		Content    string      `json:"content"`
+		Text       string      `json:"text"`
 		Size       float64     `json:"size"`
 		Color      string      `json:"color"`
 		ColorValue color.Color `json:"-"`
@@ -44,6 +46,10 @@ type (
 		Width   int32   `json:"width"`
 		Height  int32   `json:"height"`
 		Color   string  `json:"color"`
+	}
+	point struct {
+		x int32
+		y int32
 	}
 )
 
@@ -65,7 +71,7 @@ func generate(w http.ResponseWriter, req *http.Request) {
 	defer func() {
 		<-concurrent
 	}()
-
+	log.Println("start")
 	result := &NetMsg{}
 	defer req.Body.Close()
 	defer result.SendTo(w)
@@ -94,26 +100,42 @@ func generate(w http.ResponseWriter, req *http.Request) {
 	ctx.SetDPI(defaultDpi)
 	ctx.SetClip(rgba.Bounds())
 	ctx.SetFont(fnt)
-
 	bgColor := colorSum(bg.C)
 	for i, t := range params.Content {
+		log.Println(t.Color, t.Text, t.Size)
 		size := int(t.Size)
 		ctx.SetFontSize(t.Size)
+		// color #232323
+		if len(t.Color) == 7 {
+			r, _ := strconv.ParseInt(t.Color[1:3], 10, 8)
+			g, _ := strconv.ParseInt(t.Color[3:5], 10, 8)
+			b, _ := strconv.ParseInt(t.Color[5:7], 10, 8)
+			t.ColorValue = color.RGBA{A: 255, R: uint8(r), G: uint8(g), B: uint8(b)}
+		} else {
+			t.ColorValue = color.RGBA{A: 255}
+		}
+
 		ctx.SetSrc(image.NewUniform(t.ColorValue))
-		txtSize := measure(defaultDpi, t.Size, t.Content, fnt)
+		txtSize := measure(defaultDpi, t.Size, t.Text, fnt)
 		topX, topY := queryIntegralImage(rgba, txtSize.Round(), size, bgColor, qualityNormal)
 		if topX < 0 || topY < 0 {
 			log.Printf("no room left, %d of %d worlds finished", i, len(params.Content))
 			break
 		}
+		log.Println(topX, topY)
 		// baseline start point of the text
-		p := freetype.Pt(topX, topY+int(t.Size*3/4))
-		_, e := ctx.DrawString(t.Content, p)
+		p := freetype.Pt(int(topX), int(topY)+int(t.Size*3/4))
+		_, e := ctx.DrawString(t.Text, p)
 		if e != nil {
 			log.Println(e.Error())
 		}
-
 	}
+	f, e := os.Create("tmp.png")
+	if e != nil {
+		return
+	}
+	png.Encode(f, rgba)
+	f.Close()
 	var b bytes.Buffer
 	writer := bufio.NewWriter(&b)
 	if e := png.Encode(writer, rgba); e != nil {
@@ -127,6 +149,8 @@ func generate(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	result.Data = b.Bytes()
+	log.Println("done")
+
 }
 
 // parseFont 用于将字体文件解析为字体
@@ -231,15 +255,15 @@ func colorSum(p color.Color) uint32 {
 
 // queryIntegralImage 查找符合(sizeX, sizeY)的空白区域，并随机取其一
 // 返回随机到的空白区域左上角的坐标，(-1,-1)表示未找到符合条件的
-func queryIntegralImage(img image.Image, sizeX, sizeY int, bgColor uint32, quality int) (lTopX, lTopY int) {
+func queryIntegralImage(img image.Image, sizeX, sizeY int, bgColor uint32, quality int) (lTopX, lTopY int32) {
 	if quality < qualityHigh {
 		quality = qualityHigh
 	}
 	size := img.Bounds().Size()
-	hit := int64(0)
 
 	foldX := size.X - sizeX
 	foldY := size.Y - sizeY
+	points := make([]point, 0)
 	// count how many possible locations
 	for i := 0; i < foldX; i++ {
 		for j := 0; j < foldY; j++ {
@@ -265,41 +289,17 @@ func queryIntegralImage(img image.Image, sizeX, sizeY int, bgColor uint32, quali
 			if !blank {
 				continue
 			}
-			hit++
-
+			points = append(points, point{int32(i), int32(j)})
 		}
 	}
-	if hit == 0 {
+	if len(points) == 0 {
 		// no room left
 		return -1, -1
 	}
 	// pick a location at random
-	goal := rand.Int63n(int64(hit))
-	hit = 0
-	for i := 0; i < foldX; i++ {
-		for j := 0; j < foldY; j++ {
-			blank := true
-			for x := i + sizeX; x >= i; x -= quality {
-				for y := j + sizeY; y >= j; y -= quality {
-					if colorSum(img.At(x, y)) != bgColor {
-						blank = false
-						break
-					}
-				}
-				if !blank {
-					break
-				}
-			}
-			if !blank {
-				continue
-			}
-			hit++
-			if hit == goal {
-				return i, j
-			}
-		}
-	}
-	return -1, -1
+	goal := rand.Int31n(int32(len(points)))
+	p := points[goal]
+	return p.x, p.y
 }
 
 var commands = map[string]string{
