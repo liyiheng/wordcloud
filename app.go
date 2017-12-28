@@ -53,6 +53,18 @@ type (
 	}
 )
 
+func (t *Text) ParseColor() {
+	// color #232323
+	if len(t.Color) == 7 {
+		r, _ := strconv.ParseInt(t.Color[1:3], 10, 8)
+		g, _ := strconv.ParseInt(t.Color[3:5], 10, 8)
+		b, _ := strconv.ParseInt(t.Color[5:7], 10, 8)
+		t.ColorValue = color.RGBA{A: 255, R: uint8(r), G: uint8(g), B: uint8(b)}
+	} else {
+		t.ColorValue = color.RGBA{A: 255}
+	}
+}
+
 func (msg *NetMsg) SendTo(w http.ResponseWriter) {
 	dat, e := json.Marshal(msg)
 	if e != nil {
@@ -105,16 +117,7 @@ func generate(w http.ResponseWriter, req *http.Request) {
 		log.Println(t.Color, t.Text, t.Size)
 		size := int(t.Size)
 		ctx.SetFontSize(t.Size)
-		// color #232323
-		if len(t.Color) == 7 {
-			r, _ := strconv.ParseInt(t.Color[1:3], 10, 8)
-			g, _ := strconv.ParseInt(t.Color[3:5], 10, 8)
-			b, _ := strconv.ParseInt(t.Color[5:7], 10, 8)
-			t.ColorValue = color.RGBA{A: 255, R: uint8(r), G: uint8(g), B: uint8(b)}
-		} else {
-			t.ColorValue = color.RGBA{A: 255}
-		}
-
+		t.ParseColor()
 		ctx.SetSrc(image.NewUniform(t.ColorValue))
 		txtSize := measure(defaultDpi, t.Size, t.Text, fnt)
 		topX, topY := queryIntegralImage(rgba, txtSize.Round(), size, bgColor, qualityNormal)
